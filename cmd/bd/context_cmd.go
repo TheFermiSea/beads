@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyegge/beads/internal/beads"
@@ -50,8 +51,23 @@ Examples:
 			BdVersion: Version,
 		}
 
-		// Resolve repo context (works without DB open)
-		rc, err := beads.GetRepoContext()
+		var (
+			rc  *beads.RepoContext
+			err error
+		)
+
+		// An explicit --db target should drive diagnostics for backend identity
+		// as well as repo/beads location, otherwise worktree-local discovery can
+		// report a different .beads directory than the active database.
+		if dbPath := getDBPath(); dbPath != "" {
+			beadsDir := resolveCommandBeadsDir(dbPath)
+			if beadsDir != "" {
+				rc, err = beads.GetRepoContextForWorkspace(filepath.Dir(beadsDir))
+			}
+		}
+		if rc == nil && err == nil {
+			rc, err = beads.GetRepoContext()
+		}
 		if err != nil {
 			if jsonOutput {
 				outputJSON(map[string]string{"error": fmt.Sprintf("cannot resolve repo context: %v", err)})

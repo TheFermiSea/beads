@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -180,6 +181,45 @@ func TestEmbeddedDolt(t *testing.T) {
 		bdCreate(t, bd, ppDir, "Second push issue", "--type", "task")
 		bdDolt(t, bd, ppDir, "commit", "-m", "second commit")
 		bdDolt(t, bd, ppDir, "push")
+	})
+
+	t.Run("pull_auto_commits_pending_changes", func(t *testing.T) {
+		sourceDir, _, _ := bdInit(t, bd, "--prefix", "pas")
+		remoteDir := t.TempDir()
+
+		bdDolt(t, bd, sourceDir, "remote", "add", "origin", "file://"+remoteDir)
+		bdCreate(t, bd, sourceDir, "Initial shared issue", "--type", "task")
+		bdDolt(t, bd, sourceDir, "commit", "-m", "shared baseline")
+		bdDolt(t, bd, sourceDir, "push")
+
+		// Clone the initialized repo so the target shares history with the source.
+		targetRoot := t.TempDir()
+		targetDir := filepath.Join(targetRoot, "target-repo")
+		copyCmd := exec.Command("cp", "-R", sourceDir, targetDir)
+		if out, err := copyCmd.CombinedOutput(); err != nil {
+			t.Fatalf("cp -R sourceDir targetDir failed: %v\n%s", err, out)
+		}
+
+		bdCreate(t, bd, sourceDir, "Remote issue", "--type", "task")
+		bdDolt(t, bd, sourceDir, "commit", "-m", "remote commit")
+		bdDolt(t, bd, sourceDir, "push")
+
+		// Leave a local write pending in targetDir. Prior to the fix, `bd dolt pull`
+		// failed here with "cannot merge with uncommitted changes".
+		bdCreate(t, bd, targetDir, "Local pending issue", "--type", "task")
+
+		out := bdDolt(t, bd, targetDir, "pull")
+		if !strings.Contains(out, "Pull complete.") {
+			t.Fatalf("expected pull completion message, got: %s", out)
+		}
+
+		listOut := bdList(t, bd, targetDir)
+		if !strings.Contains(listOut, "Remote issue") {
+			t.Fatalf("expected pulled remote issue in target repo, got: %s", listOut)
+		}
+		if !strings.Contains(listOut, "Local pending issue") {
+			t.Fatalf("expected local pending issue to survive auto-commit+pull, got: %s", listOut)
+		}
 	})
 }
 

@@ -34,8 +34,9 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		result := WhereResult{}
 
-		// Find the beads directory (this follows redirects)
-		beadsDir := beads.FindBeadsDir()
+		// Prefer the explicit --db target when present; otherwise fall back to
+		// normal discovery (which follows redirects and worktree routing).
+		beadsDir := currentCommandBeadsDir()
 		if beadsDir == "" {
 			if jsonOutput {
 				outputJSON(map[string]string{"error": "no beads directory found"})
@@ -55,8 +56,12 @@ Examples:
 			result.RedirectedFrom = originalBeadsDir
 		}
 
-		// Find the database path
-		dbPath := beads.FindDatabasePath()
+		// Prefer the explicit --db target when present so diagnostics match the
+		// store the command is actually operating on.
+		dbPath := getDBPath()
+		if dbPath == "" {
+			dbPath = beads.FindDatabasePath()
+		}
 		if dbPath != "" {
 			result.DatabasePath = dbPath
 

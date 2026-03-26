@@ -73,6 +73,30 @@ func TestEmbeddedWhere(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("where_explicit_db_uses_target_beads_dir", func(t *testing.T) {
+		targetDir, targetBeadsDir, _ := bdInit(t, bd, "--prefix", "wdb")
+		sourceDir, _, _ := bdInit(t, bd, "--prefix", "wsrc")
+
+		infoOut := bdInfo(t, bd, targetDir)
+		const marker = "Database: "
+		idx := strings.Index(infoOut, marker)
+		if idx < 0 {
+			t.Fatalf("bd info output missing %q: %s", marker, infoOut)
+		}
+		dbPath := strings.TrimSpace(strings.SplitN(infoOut[idx+len(marker):], "\n", 2)[0])
+		if dbPath == "" {
+			t.Fatalf("parsed empty database path from bd info output: %s", infoOut)
+		}
+
+		out := bdWhere(t, bd, sourceDir, "--db", dbPath)
+		if !strings.Contains(out, targetBeadsDir) {
+			t.Fatalf("expected where output to use target beads dir %q, got: %s", targetBeadsDir, out)
+		}
+		if !strings.Contains(out, dbPath) {
+			t.Fatalf("expected where output to use target db path %q, got: %s", dbPath, out)
+		}
+	})
 }
 
 // TestEmbeddedWhereConcurrent exercises where operations concurrently.

@@ -142,11 +142,21 @@ func loadBeadsEnvFile(beadsDir string) {
 // or telemetry setup — those belong in the store-init phase that runs after the
 // noDbCommands check.
 func loadEnvironment() {
-	// FindBeadsDir is lightweight (filesystem walk, no git subprocesses)
-	// and resolves BEADS_DIR, redirects, and worktree paths.
-	if beadsDir := beads.FindBeadsDir(); beadsDir != "" {
+	// An explicit --db flag should also drive .beads/.env loading so commands
+	// like `bd context --db ...` and `bd doctor --db ...` pick up the correct
+	// per-project credentials and routing metadata.
+	if beadsDir := currentCommandBeadsDir(); beadsDir != "" {
 		loadBeadsEnvFile(beadsDir)
 	}
+}
+
+func currentCommandBeadsDir() string {
+	if dbPath := getDBPath(); dbPath != "" {
+		if beadsDir := resolveCommandBeadsDir(dbPath); beadsDir != "" {
+			return beadsDir
+		}
+	}
+	return beads.FindBeadsDir()
 }
 
 // resolveCommandBeadsDir maps a discovered Dolt data path back to the owning
@@ -397,6 +407,11 @@ var rootCmd = &cobra.Command{
 			FatalError("%v", err)
 		}
 
+		// Sync parsed flags/config into CommandContext before any early returns.
+		// Commands in noDbCommands still rely on accessors like getDBPath() and
+		// isJSONOutput(), so the context must be populated before the no-DB fast path.
+		syncCommandContext()
+
 		// GH#2677: Load .beads/.env before the noDbCommands early return so that
 		// commands like "bd doctor --server" pick up per-project Dolt credentials.
 		loadEnvironment()
@@ -426,6 +441,7 @@ var rootCmd = &cobra.Command{
 			"quickstart",
 			"setup",
 			"version",
+			"where", // diagnostics command; explicit --db should not force store init
 			"zsh",
 		}
 

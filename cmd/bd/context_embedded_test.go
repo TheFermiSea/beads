@@ -45,6 +45,31 @@ func TestEmbeddedContext(t *testing.T) {
 			t.Error("expected non-empty context --json output")
 		}
 	})
+
+	t.Run("context_explicit_db_uses_target_beads_dir", func(t *testing.T) {
+		targetDir, targetBeadsDir, _ := bdInit(t, bd, "--prefix", "cdb")
+		sourceDir, _, _ := bdInit(t, bd, "--prefix", "csrc")
+		infoOut := bdInfo(t, bd, targetDir)
+		const marker = "Database: "
+		idx := strings.Index(infoOut, marker)
+		if idx < 0 {
+			t.Fatalf("bd info output missing %q: %s", marker, infoOut)
+		}
+		dbPath := strings.TrimSpace(strings.SplitN(infoOut[idx+len(marker):], "\n", 2)[0])
+		if dbPath == "" {
+			t.Fatalf("parsed empty database path from bd info output: %s", infoOut)
+		}
+		cmd := exec.Command(bd, "context", "--db", dbPath)
+		cmd.Dir = sourceDir
+		cmd.Env = bdEnv(sourceDir)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bd context --db failed: %v\n%s", err, out)
+		}
+		if !strings.Contains(string(out), targetBeadsDir) && !strings.Contains(string(out), "/private"+targetBeadsDir) {
+			t.Fatalf("expected context output to use target beads dir %q, got: %s", targetBeadsDir, out)
+		}
+	})
 }
 
 func TestEmbeddedContextConcurrent(t *testing.T) {
